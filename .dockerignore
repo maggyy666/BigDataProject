@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Data warehouse (generowane przez pipeline)
+data/warehouse/
+data/analysis/
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# OS
+.DS_Store
+Thumbs.db

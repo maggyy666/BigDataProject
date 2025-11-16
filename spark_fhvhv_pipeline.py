@@ -9,10 +9,17 @@ Minimalny pipeline Spark dla danych FHVHV (NYC, 2025-01..04)
 
 from pathlib import Path
 from pyspark.sql import SparkSession, functions as F
+import os
 
 # --- ŚCIEŻKI ------------------------------------------------------------------
 
-DATA_DIR = Path("data")
+# W Dockerze używamy /opt/spark-data (wspólne dla wszystkich kontenerów)
+# Lokalnie używamy data/
+if os.path.exists("/opt/spark-data"):
+    DATA_DIR = Path("/opt/spark-data")
+else:
+    DATA_DIR = Path("data")
+
 RAW_DIR = DATA_DIR / "raw"
 WH_DIR = DATA_DIR / "warehouse"
 CLEANED_DIR = WH_DIR / "cleaned" / "fhvhv_2025_q1"
@@ -22,23 +29,49 @@ JSON_DIR = WH_DIR / "json_reports"
 # --- SPARK --------------------------------------------------------------------
 
 def create_spark():
-    """Tworzy sesję Spark (local[*])"""
+    """
+    Tworzy sesję Spark połączoną z klastrem Docker.
+    Automatycznie wykrywa środowisko i łączy się z masterem przez spark://spark-master:7077
+    """
+    # Sprawdź czy jesteśmy w kontenerze Docker
+    spark_master = os.getenv("SPARK_MASTER", "spark://spark-master:7077")
+    
+    # Jeśli jesteśmy w kontenerze Docker, użyj spark-master, w przeciwnym razie localhost
+    if not os.path.exists("/.dockerenv"):
+        # Lokalne uruchomienie - użyj localhost
+        spark_master = "spark://localhost:7077"
+        driver_host = "localhost"
+    else:
+        # W kontenerze Docker
+        driver_host = "spark-pipeline"
+    
+    print(f"🔗 Łączenie z Spark Master: {spark_master}")
+    
     spark = (
         SparkSession.builder
         .appName("NYC FHVHV Big Data Project")
-        .master("local[*]")
+        .master(spark_master)
+        .config("spark.executor.memory", "2g")
+        .config("spark.executor.cores", "2")
+        .config("spark.driver.memory", "1g")
         .config("spark.sql.adaptive.enabled", "true")
         .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+        .config("spark.driver.host", driver_host)
+        .config("spark.driver.bindAddress", "0.0.0.0")
+        .config("spark.network.timeout", "800s")
+        .config("spark.executor.heartbeatInterval", "60s")
         .getOrCreate()
     )
     spark.sparkContext.setLogLevel("WARN")
+    print(f"✅ Połączono z klastrem Spark!")
     return spark
 
 # --- ETAP 1: WCZYTANIE --------------------------------------------------------
 
 def load_fhvhv_data(spark):
     """Wczytuje 4 pliki FHVHV Parquet (2025-01..04)"""
-    months = ["01", "02", "03", "04"]
+    # months = ["01", "02", "03", "04"]
+    months=["01"]
     paths = [RAW_DIR / f"fhvhv_tripdata_2025-{m}.parquet" for m in months]
 
     print("\n📂 Wczytuję pliki FHVHV:")
@@ -54,7 +87,8 @@ def load_fhvhv_data(spark):
     if not existing_paths:
         raise FileNotFoundError("Brak plików FHVHV do wczytania!")
     
-    str_paths = [str(p) for p in existing_paths]
+    # Konwertuj na bezwzględne ścieżki dla Spark
+    str_paths = [str(p.absolute()) for p in existing_paths]
     df = spark.read.parquet(*str_paths)
 
     print(f"   → liczba wierszy RAW: {df.count():,}")
@@ -167,18 +201,21 @@ def save_outputs(df_clean, monthly, hourly, summary):
         .partitionBy("pickup_month")
         .parquet(str(CLEANED_DIR))
     )
+    print("   ✓ Zapisano oczyszczone dane Parquet (partycjonowane po miesiącu)")
 
     # 2) metryki miesięczne – Parquet + CSV
     print(f"💾 Zapis miesięcznych metryk do: {AGG_DIR}")
     (
         monthly.write
         .mode("overwrite")
+        .option("compression", "uncompressed")
         .parquet(str(AGG_DIR / "monthly_metrics_parquet"))
     )
     (
         monthly.write
         .mode("overwrite")
         .option("header", True)
+        .option("compression", "uncompressed")
         .csv(str(AGG_DIR / "monthly_metrics_csv"))
     )
 
@@ -187,6 +224,7 @@ def save_outputs(df_clean, monthly, hourly, summary):
         hourly.write
         .mode("overwrite")
         .option("header", True)
+        .option("compression", "uncompressed")
         .csv(str(AGG_DIR / "hourly_volume_csv"))
     )
 
