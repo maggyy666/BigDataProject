@@ -1,4 +1,4 @@
-FROM eclipse-temurin:17-jdk-jammy
+FROM eclipse-temurin:11-jdk-jammy
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -10,10 +10,12 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+RUN groupadd -g 185 spark && \
+    useradd -m -u 185 -g 185 spark
+
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-# Ustawienie katalogu roboczego
 WORKDIR /app
 
 COPY requirements.txt .
@@ -24,6 +26,6 @@ COPY spark_fhvhv_pipeline.py .
 ENV PYSPARK_PYTHON=python3
 ENV PYSPARK_DRIVER_PYTHON=python3
 
-# Domyślne polecenie
-CMD ["python", "spark_fhvhv_pipeline.py"]
+USER spark
 
+CMD ["python", "spark_fhvhv_pipeline.py"]

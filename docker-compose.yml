@@ -1,25 +1,23 @@
+version: '3.8'
+
 services:
   spark-master:
-    image: apache/spark:3.4.0-scala2.12-java17-ubuntu
+    image: apache/spark:3.4.0-scala2.12-java11-ubuntu
     container_name: spark-master
     hostname: spark-master
     command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
     environment:
       - SPARK_NO_DAEMONIZE=true
     ports:
-      - "8080:8080"  # Spark Master Web UI
-      - "7077:7077"  # Spark Master port
+      - "8080:8080"  
+      - "7077:7077"
     volumes:
-      # tylko dane wejściowe z hosta (read-only)
-      - ./data/raw:/opt/spark-data/raw:ro
-      # wynikowe rzeczy do Docker volume (czysty Linux FS)
-      - spark-warehouse:/opt/spark-data/warehouse
-    user: "0:0"  # Root dla uprawnień zapisu
+      - ./data:/opt/spark-data
     networks:
       - spark-network
 
   spark-worker-1:
-    image: apache/spark:3.4.0-scala2.12-java17-ubuntu
+    image: apache/spark:3.4.0-scala2.12-java11-ubuntu
     container_name: spark-worker-1
     hostname: spark-worker-1
     command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
@@ -27,19 +25,19 @@ services:
       - SPARK_WORKER_CORES=2
       - SPARK_WORKER_MEMORY=2g
       - SPARK_NO_DAEMONIZE=true
+      - DATA_DIR=/opt/spark-data
     ports:
-      - "8081:8081"  # Spark Worker Web UI
+      - "8081:8081"
     volumes:
-      - ./data/raw:/opt/spark-data/raw:ro
-      - spark-warehouse:/opt/spark-data/warehouse
-    user: "0:0"  # Root dla uprawnień zapisu
+      - ./data:/opt/spark-data
     depends_on:
       - spark-master
     networks:
       - spark-network
 
   spark-worker-2:
-    image: apache/spark:3.4.0-scala2.12-java17-ubuntu
+    
+    image: apache/spark:3.4.0-scala2.12-java11-ubuntu
     container_name: spark-worker-2
     hostname: spark-worker-2
     command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
@@ -47,12 +45,11 @@ services:
       - SPARK_WORKER_CORES=2
       - SPARK_WORKER_MEMORY=2g
       - SPARK_NO_DAEMONIZE=true
+      - DATA_DIR=/opt/spark-data
     ports:
-      - "8082:8081"  
+      - "8082:8081"
     volumes:
-      - ./data/raw:/opt/spark-data/raw:ro
-      - spark-warehouse:/opt/spark-data/warehouse
-    user: "0:0"  
+      - ./data:/opt/spark-data
     depends_on:
       - spark-master
     networks:
@@ -66,10 +63,10 @@ services:
     hostname: spark-pipeline
     environment:
       - SPARK_MASTER=spark://spark-master:7077
+      - DATA_DIR=/opt/spark-data
     volumes:
-      - ./data/raw:/opt/spark-data/raw:ro
-      - spark-warehouse:/opt/spark-data/warehouse
-    user: "0:0" 
+      - ./data:/app/data
+      - ./data:/opt/spark-data
     depends_on:
       - spark-master
       - spark-worker-1
@@ -81,7 +78,4 @@ services:
 networks:
   spark-network:
     driver: bridge
-
-volumes:
-  spark-warehouse:
 

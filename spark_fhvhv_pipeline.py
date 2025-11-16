@@ -15,10 +15,8 @@ import os
 
 # W Dockerze używamy /opt/spark-data (wspólne dla wszystkich kontenerów)
 # Lokalnie używamy data/
-if os.path.exists("/opt/spark-data"):
-    DATA_DIR = Path("/opt/spark-data")
-else:
-    DATA_DIR = Path("data")
+
+DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
 
 RAW_DIR = DATA_DIR / "raw"
 WH_DIR = DATA_DIR / "warehouse"
@@ -199,9 +197,9 @@ def save_outputs(df_clean, monthly, hourly, summary):
         df_clean.write
         .mode("overwrite")
         .partitionBy("pickup_month")
+        .option("compression", "uncompressed")
         .parquet(str(CLEANED_DIR))
     )
-    print("   ✓ Zapisano oczyszczone dane Parquet (partycjonowane po miesiącu)")
 
     # 2) metryki miesięczne – Parquet + CSV
     print(f"💾 Zapis miesięcznych metryk do: {AGG_DIR}")
